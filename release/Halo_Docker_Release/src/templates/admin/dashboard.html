@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台 — {{ settings.blog_title }}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body class="admin-body">
+    <div class="admin-layout">
+        <!-- Sidebar -->
+        <aside class="admin-sidebar">
+            <div class="admin-logo">
+                <span>✦</span> Halo Blog
+            </div>
+            <nav class="admin-nav">
+                <a href="/admin" class="nav-item active" data-page="dashboard">📊 仪表盘</a>
+                <a href="/admin/posts" class="nav-item" data-page="posts">📝 文章管理</a>
+                <a href="/admin/editor" class="nav-item" data-page="editor">✏️ 写文章</a>
+                <a href="/admin/categories" class="nav-item" data-page="categories">📂 分类管理</a>
+                <a href="/admin/tags" class="nav-item" data-page="tags">🏷️ 标签管理</a>
+                <a href="/admin/comments" class="nav-item" data-page="comments">💬 评论管理</a>
+                <a href="/admin/links" class="nav-item" data-page="links">🔗 友链管理</a>
+                <a href="/" class="nav-item" target="_blank">🌐 查看网站</a>
+            </nav>
+            <div class="admin-footer-brand">
+                <small>© 2026 ArcaneCoreX-dev</small>
+            </div>
+        </aside>
+
+        <!-- Content -->
+        <main class="admin-main">
+            <header class="admin-header">
+                <h2 id="page-title">仪表盘</h2>
+                <div class="admin-user">
+                    <span id="admin-name">Admin</span>
+                    <button onclick="logout()" class="btn btn-sm">退出</button>
+                </div>
+            </header>
+            <div class="admin-content" id="admin-content">
+                <div class="loading">加载中...</div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal" id="login-modal">
+        <div class="modal-content">
+            <h2>🔐 登录管理后台</h2>
+            <form id="login-form" onsubmit="return doLogin(event)">
+                <input type="text" id="login-user" placeholder="用户名" value="admin" required>
+                <input type="password" id="login-pass" placeholder="密码" required>
+                <button type="submit" class="btn btn-primary btn-block">登录</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>

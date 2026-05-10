@@ -1,0 +1,109 @@
+{% extends "theme/base.html" %}
+{% block title %}{{ settings.blog_title }} — {{ settings.blog_subtitle }}{% endblock %}
+
+{% block content %}
+<div class="home-layout">
+    <!-- Hero -->
+    <section class="hero">
+        <h1 class="hero-title">{{ settings.blog_title }}</h1>
+        <p class="hero-subtitle">{{ settings.blog_subtitle }}</p>
+    </section>
+
+    <!-- Post list -->
+    <section class="post-list" id="post-list">
+        <div class="loading">加载中...</div>
+    </section>
+
+    <!-- Pagination -->
+    <div class="pagination" id="pagination"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="widget">
+            <h3 class="widget-title">分类</h3>
+            <div id="category-list" class="category-list"></div>
+        </div>
+        <div class="widget">
+            <h3 class="widget-title">标签</h3>
+            <div id="tag-cloud" class="tag-cloud"></div>
+        </div>
+    </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPage = 1;
+const pageSize = {{ settings.posts_per_page }};
+
+async function loadPosts(page = 1) {
+    currentPage = page;
+    const params = new URLSearchParams({ page, page_size: pageSize });
+    const cat = new URLSearchParams(window.location.search).get('category');
+    const tag = new URLSearchParams(window.location.search).get('tag');
+    if (cat) params.set('category', cat);
+    if (tag) params.set('tag', tag);
+
+    const res = await fetch(`/api/posts?${params}`);
+    const data = await res.json();
+
+    const container = document.getElementById('post-list');
+    if (data.items.length === 0) {
+        container.innerHTML = '<div class="empty">暂无文章</div>';
+    } else {
+        container.innerHTML = data.items.map(p => `
+            <article class="post-card ${p.is_top ? 'is-top' : ''}">
+                ${p.cover_image ? `<div class="post-cover"><img src="${p.cover_image}" alt="${p.title}" loading="lazy"></div>` : ''}
+                <div class="post-body">
+                    <div class="post-meta">
+                        ${p.category ? `<span class="meta-cat"><a href="/?category=${p.category.slug}">${p.category.name}</a></span>` : ''}
+                        <span class="meta-date">${formatDate(p.published_at)}</span>
+                        <span class="meta-views">👁 ${p.views}</span>
+                        <span class="meta-comments">💬 ${p.comment_count}</span>
+                    </div>
+                    <h2 class="post-title"><a href="/post/${p.slug}">${p.is_top ? '📌 ' : ''}${p.title}</a></h2>
+                    <p class="post-summary">${p.summary || ''}</p>
+                    <div class="post-tags">${p.tags.map(t => `<a href="/?tag=${t.slug}" class="tag">#${t.name}</a>`).join('')}</div>
+                </div>
+            </article>
+        `).join('');
+    }
+
+    // Pagination
+    const pg = document.getElementById('pagination');
+    if (data.total_pages > 1) {
+        let html = '';
+        if (page > 1) html += `<button onclick="loadPosts(${page - 1})">← 上一页</button>`;
+        html += `<span class="page-info">${page} / ${data.total_pages}</span>`;
+        if (page < data.total_pages) html += `<button onclick="loadPosts(${page + 1})">下一页 →</button>`;
+        pg.innerHTML = html;
+    } else {
+        pg.innerHTML = '';
+    }
+}
+
+async function loadSidebar() {
+    const [cats, tags] = await Promise.all([
+        fetch('/api/categories').then(r => r.json()),
+        fetch('/api/tags').then(r => r.json()),
+    ]);
+
+    document.getElementById('category-list').innerHTML = cats.map(c =>
+        `<a href="/?category=${c.slug}" class="cat-item">${c.name} <span class="cat-count">${c.post_count}</span></a>`
+    ).join('') || '<p class="empty-sm">暂无分类</p>';
+
+    document.getElementById('tag-cloud').innerHTML = tags.map(t =>
+        `<a href="/?tag=${t.slug}" class="tag">#${t.name} (${t.post_count})</a>`
+    ).join('') || '<p class="empty-sm">暂无标签</p>';
+}
+
+function formatDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+loadPosts();
+loadSidebar();
+</script>
+{% endblock %}

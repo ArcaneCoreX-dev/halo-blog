@@ -1,0 +1,40 @@
+{% extends "theme/base.html" %}
+{% block title %}归档 — {{ settings.blog_title }}{% endblock %}
+
+{% block content %}
+<div class="page-layout">
+    <h1 class="page-title">📚 文章归档</h1>
+    <div id="archives" class="archives"><div class="loading">加载中...</div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadArchives() {
+    const res = await fetch('/api/archives');
+    const data = await res.json();
+    const container = document.getElementById('archives');
+
+    const months = Object.keys(data).sort().reverse();
+    if (months.length === 0) {
+        container.innerHTML = '<p class="empty">暂无文章</p>';
+        return;
+    }
+
+    container.innerHTML = months.map(month => `
+        <div class="archive-group">
+            <h2 class="archive-month">${month}</h2>
+            <ul class="archive-list">
+                ${data[month].map(p => `
+                    <li>
+                        <span class="archive-date">${p.published_at.slice(5, 10)}</span>
+                        <a href="/post/${p.slug}" class="archive-title">${p.title}</a>
+                    </li>
+                `).join('')}
+            </ul>
+        </div>
+    `).join('');
+}
+loadArchives();
+</script>
+{% endblock %}

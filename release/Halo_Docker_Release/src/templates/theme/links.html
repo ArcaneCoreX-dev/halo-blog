@@ -1,0 +1,32 @@
+{% extends "theme/base.html" %}
+{% block title %}友链 — {{ settings.blog_title }}{% endblock %}
+
+{% block content %}
+<div class="page-layout">
+    <h1 class="page-title">🔗 友情链接</h1>
+    <div id="links" class="links-grid"><div class="loading">加载中...</div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadLinks() {
+    const res = await fetch('/api/links');
+    const data = await res.json();
+    const container = document.getElementById('links');
+
+    if (data.length === 0) {
+        container.innerHTML = '<p class="empty">暂无友情链接</p>';
+        return;
+    }
+
+    container.innerHTML = data.map(l => `
+        <a href="${l.url}" target="_blank" rel="noopener" class="link-card">
+            <h3>${l.name}</h3>
+            <p>${l.description || l.url}</p>
+        </a>
+    `).join('');
+}
+loadLinks();
+</script>
+{% endblock %}
