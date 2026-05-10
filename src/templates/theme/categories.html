@@ -1,0 +1,33 @@
+{% extends "theme/base.html" %}
+{% block title %}分类 — {{ settings.blog_title }}{% endblock %}
+
+{% block content %}
+<div class="page-layout">
+    <h1 class="page-title">📂 文章分类</h1>
+    <div id="categories" class="categories-grid"><div class="loading">加载中...</div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadCategories() {
+    const res = await fetch('/api/categories');
+    const data = await res.json();
+    const container = document.getElementById('categories');
+
+    if (data.length === 0) {
+        container.innerHTML = '<p class="empty">暂无分类</p>';
+        return;
+    }
+
+    container.innerHTML = data.map(c => `
+        <a href="/?category=${c.slug}" class="category-card">
+            <h3>${c.name}</h3>
+            <p>${c.description || '暂无描述'}</p>
+            <span class="cat-count">${c.post_count} 篇文章</span>
+        </a>
+    `).join('');
+}
+loadCategories();
+</script>
+{% endblock %}

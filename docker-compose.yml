@@ -1,0 +1,18 @@
+services:
+  halo-blog:
+    build: .
+    container_name: halo-blog
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    environment:
+      - HALO_DEBUG=false
+      - HALO_SECRET_KEY=${HALO_SECRET_KEY:-change-me-to-a-random-string}
+      - HALO_ADMIN_USERNAME=${HALO_ADMIN_USERNAME:-admin}
+      - HALO_ADMIN_PASSWORD=${HALO_ADMIN_PASSWORD:-change-me}
+      - HALO_BLOG_TITLE=${HALO_BLOG_TITLE:-My Blog}
+      - HALO_BLOG_SUBTITLE=${HALO_BLOG_SUBTITLE:-A personal blog powered by Halo Blog}
+      - HALO_DATABASE_URL=sqlite+aiosqlite:///./data/blog.db
+    restart: unless-stopped
