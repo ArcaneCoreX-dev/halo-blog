@@ -190,7 +190,7 @@ docker logs halo-blog             # View logs
 
 - [项目技术文档](docs/PROJECT_DOCUMENTATION.md) — Architecture, API, Database
 - [管理后台操作手册](docs/OPERATIONS_MANUAL.md) — Admin guide, Configuration
-- [部署教程](docs/DEPLOYMENT.md) — Step-by-step deployment
+- [部署教程](release/Halo_Docker_Release/部署教程.md) — Step-by-step deployment
 
 ## 🤝 Contributing
 
