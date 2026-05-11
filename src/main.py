@@ -7,12 +7,13 @@ See LICENSE file for details.
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.adapters.database import async_session, init_db
+from src.adapters.database import async_session, get_db, init_db
 from src.api.admin_routes import router as admin_router
 from src.api.blog_routes import router as blog_router
 from src.config import settings
@@ -45,6 +46,20 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 app.mount("/uploads", StaticFiles(directory=str(Path(settings.upload_dir))), name="uploads")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+
+async def _get_blog_settings(db: AsyncSession):
+    """Merge config settings with admin display name for dynamic title."""
+    from sqlalchemy import select
+    from src.domain.models import User
+    user = (await db.execute(select(User).where(User.role == "admin"))).scalar_one_or_none()
+    admin_name = user.display_name if user and user.display_name else settings.blog_title
+    class BlogSettings:
+        blog_title = f"{admin_name} Blog" if user and user.display_name else settings.blog_title
+        blog_subtitle = settings.blog_subtitle
+        blog_footer = settings.blog_footer
+        posts_per_page = settings.posts_per_page
+    return BlogSettings()
+
 # API routes
 app.include_router(blog_router)
 app.include_router(admin_router)
@@ -52,28 +67,33 @@ app.include_router(admin_router)
 
 # ── Page routes (SSR with Jinja2) ────────────────────
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse(request, "theme/index.html", {"settings": settings})
+async def index(request: Request, db: AsyncSession = Depends(get_db)):
+    blog_settings = await _get_blog_settings(db)
+    return templates.TemplateResponse(request, "theme/index.html", {"settings": blog_settings})
 
 
 @app.get("/archives", response_class=HTMLResponse)
-async def archives_page(request: Request):
-    return templates.TemplateResponse(request, "theme/archives.html", {"settings": settings})
+async def archives_page(request: Request, db: AsyncSession = Depends(get_db)):
+    blog_settings = await _get_blog_settings(db)
+    return templates.TemplateResponse(request, "theme/archives.html", {"settings": blog_settings})
 
 
 @app.get("/post/{slug}", response_class=HTMLResponse)
-async def post_detail(request: Request, slug: str):
-    return templates.TemplateResponse(request, "theme/post.html", {"settings": settings, "slug": slug})
+async def post_detail(request: Request, slug: str, db: AsyncSession = Depends(get_db)):
+    blog_settings = await _get_blog_settings(db)
+    return templates.TemplateResponse(request, "theme/post.html", {"settings": blog_settings, "slug": slug})
 
 
 @app.get("/categories", response_class=HTMLResponse)
-async def categories_page(request: Request):
-    return templates.TemplateResponse(request, "theme/categories.html", {"settings": settings})
+async def categories_page(request: Request, db: AsyncSession = Depends(get_db)):
+    blog_settings = await _get_blog_settings(db)
+    return templates.TemplateResponse(request, "theme/categories.html", {"settings": blog_settings})
 
 
 @app.get("/links", response_class=HTMLResponse)
-async def links_page(request: Request):
-    return templates.TemplateResponse(request, "theme/links.html", {"settings": settings})
+async def links_page(request: Request, db: AsyncSession = Depends(get_db)):
+    blog_settings = await _get_blog_settings(db)
+    return templates.TemplateResponse(request, "theme/links.html", {"settings": blog_settings})
 
 
 # ── Admin SPA ────────────────────────────────────────

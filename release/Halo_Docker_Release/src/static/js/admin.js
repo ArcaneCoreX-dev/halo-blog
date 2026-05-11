@@ -69,7 +69,7 @@ async function loadPage(page) {
 
     const titles = {
         dashboard: '仪表盘', posts: '文章管理', editor: '写文章',
-        categories: '分类管理', tags: '标签管理', comments: '评论管理', links: '友链管理',
+        categories: '分类管理', tags: '标签管理', comments: '评论管理', links: '友链管理', profile: '个人信息',
     };
     title.textContent = titles[page] || page;
     content.innerHTML = '<div class="loading">加载中...</div>';
@@ -82,6 +82,7 @@ async function loadPage(page) {
         case 'tags': await renderTags(content); break;
         case 'comments': await renderComments(content); break;
         case 'links': await renderLinks(content); break;
+        case 'profile': await renderProfile(content); break;
     }
 }
 
@@ -216,6 +217,11 @@ function renderEditor(el) {
             <label>摘要</label>
             <input id="ep-summary" placeholder="文章摘要（可选）">
         </div>
+        <div class="form-group">
+            <label>标签</label>
+            <div id="ep-tags-container" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;min-height:36px;"></div>
+            <small style="color:var(--text-secondary);margin-top:4px;display:block;">点击标签选中/取消</small>
+        </div>
         <div class="editor-layout">
             <div class="editor-input">
                 <label style="font-weight:600;margin-bottom:8px;display:block;">Markdown 编辑器</label>
@@ -227,6 +233,27 @@ function renderEditor(el) {
         </div>
     `;
     loadCategoriesForSelect();
+    loadTagsForSelect();
+}
+
+async function loadTagsForSelect(selectedIds = []) {
+    const res = await fetch('/admin/api/tags', { headers: authHeaders() });
+    const tags = await res.json();
+    const container = document.getElementById('ep-tags-container');
+    if (!container) return;
+    container.innerHTML = tags.map(t => `
+        <span class="tag-chip ${selectedIds.includes(t.id) ? 'selected' : ''}" data-id="${t.id}"
+            style="padding:4px 12px;border-radius:16px;cursor:pointer;font-size:0.85rem;transition:all 0.2s;
+            background:${selectedIds.includes(t.id) ? 'var(--primary)' : 'var(--bg-main)'};
+            color:${selectedIds.includes(t.id) ? '#fff' : 'var(--text-primary)'};
+            border:1px solid ${selectedIds.includes(t.id) ? 'var(--primary)' : 'var(--border)'};"
+            onclick="this.classList.toggle('selected');this.style.background=this.classList.contains('selected')?'var(--primary)':'var(--bg-main)';this.style.color=this.classList.contains('selected')?'#fff':'var(--text-primary)';this.style.borderColor=this.classList.contains('selected')?'var(--primary)':'var(--border)';"
+        >${t.name}</span>
+    `).join('');
+}
+
+function getSelectedTagIds() {
+    return Array.from(document.querySelectorAll('#ep-tags-container .tag-chip.selected')).map(el => parseInt(el.dataset.id));
 }
 
 function fillEditor(post) {
@@ -236,6 +263,7 @@ function fillEditor(post) {
     document.getElementById('ep-summary').value = post.summary || '';
     document.getElementById('ep-content').value = post.content || '';
     if (post.category_id) document.getElementById('ep-category').value = post.category_id;
+    loadTagsForSelect(post.tags ? post.tags.map(t => t.id) : []);
     updatePreview();
 }
 
@@ -279,7 +307,7 @@ async function savePost(status) {
         content,
         status: status || 'draft',
         category_id: document.getElementById('ep-category').value || null,
-        tag_ids: [],
+        tag_ids: getSelectedTagIds(),
     };
 
     const url = editingPostId ? `/admin/api/posts/${editingPostId}` : '/admin/api/posts';
@@ -337,15 +365,32 @@ function showAddCategory() { document.getElementById('cat-form').style.display =
 
 async function addCategory() {
     const name = document.getElementById('cat-name').value.trim();
-    const slug = document.getElementById('cat-slug').value.trim();
-    if (!name) return toast('请输入分类名称', 'error');
-    if (!slug) slug = name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-');
+    let slug = document.getElementById('cat-slug').value.trim();
+    if (!name) { toast('请输入分类名称', 'error'); return; }
+    if (!slug) {
+        // 自动生成 slug：中文转拼音风格，英文小写
+        slug = name.toLowerCase()
+            .replace(/[\u4e00-\u9fff]+/g, m => m) // 保留中文
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '') || 'category-' + Date.now();
+    }
 
-    const res = await fetch('/admin/api/categories', {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ name, slug, description: document.getElementById('cat-desc').value }),
-    });
-    if (res.ok) { toast('分类已创建'); renderCategories(document.getElementById('admin-content')); }
+    try {
+        const res = await fetch('/admin/api/categories', {
+            method: 'POST', headers: authHeaders(),
+            body: JSON.stringify({ name, slug, description: document.getElementById('cat-desc').value }),
+        });
+        if (res.ok) {
+            toast('分类已创建');
+            renderCategories(document.getElementById('admin-content'));
+        } else {
+            const err = await res.json();
+            toast(err.detail || '创建失败', 'error');
+        }
+    } catch (e) {
+        toast('网络错误，请重试', 'error');
+        console.error(e);
+    }
 }
 
 async function deleteCategory(id) {
@@ -515,4 +560,98 @@ function toast(msg, type = 'success') {
     el.textContent = msg;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 3000);
+}
+
+// ── Profile ──────────────────────────────────────────
+async function renderProfile(el) {
+    const res = await fetch('/admin/api/profile', { headers: authHeaders() });
+    if (!res.ok) { toast('加载失败', 'error'); return; }
+    const user = await res.json();
+
+    el.innerHTML = `
+        <div style="max-width:600px;">
+            <div class="admin-table">
+                <div style="padding:24px;">
+                    <h3 style="margin-bottom:20px;">👤 个人信息</h3>
+                    <div class="form-group">
+                        <label>用户名</label>
+                        <input id="prof-username" value="${user.username}" disabled style="opacity:0.6;">
+                        <small style="color:var(--text-secondary);">用户名不可修改</small>
+                    </div>
+                    <div class="form-group">
+                        <label>显示名称</label>
+                        <input id="prof-displayname" value="${user.display_name || ''}" placeholder="用于前端展示">
+                    </div>
+                    <div class="form-group">
+                        <label>邮箱</label>
+                        <input id="prof-email" type="email" value="${user.email || ''}" placeholder="your@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label>头像 URL</label>
+                        <input id="prof-avatar" value="${user.avatar || ''}" placeholder="https://example.com/avatar.jpg">
+                        ${user.avatar ? `<div style="margin-top:8px;"><img src="${user.avatar}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;"></div>` : ''}
+                    </div>
+                    <button class="btn btn-primary" onclick="saveProfile()">保存资料</button>
+                </div>
+            </div>
+
+            <div class="admin-table" style="margin-top:20px;">
+                <div style="padding:24px;">
+                    <h3 style="margin-bottom:20px;">🔒 修改密码</h3>
+                    <div class="form-group">
+                        <label>当前密码</label>
+                        <input id="prof-old-pass" type="password" placeholder="输入当前密码">
+                    </div>
+                    <div class="form-group">
+                        <label>新密码</label>
+                        <input id="prof-new-pass" type="password" placeholder="至少 6 位">
+                    </div>
+                    <div class="form-group">
+                        <label>确认新密码</label>
+                        <input id="prof-confirm-pass" type="password" placeholder="再次输入新密码">
+                    </div>
+                    <button class="btn btn-primary" onclick="changePassword()">修改密码</button>
+                </div>
+            </div>
+
+            <div style="margin-top:16px;padding:16px;background:var(--bg-card);border-radius:8px;font-size:0.85rem;color:var(--text-secondary);">
+                注册时间：${formatDate(user.created_at)} | 角色：${user.role}
+            </div>
+        </div>
+    `;
+}
+
+async function saveProfile() {
+    const data = {
+        display_name: document.getElementById('prof-displayname').value.trim(),
+        email: document.getElementById('prof-email').value.trim(),
+        avatar: document.getElementById('prof-avatar').value.trim(),
+    };
+    try {
+        const res = await fetch('/admin/api/profile', {
+            method: 'PUT', headers: authHeaders(),
+            body: JSON.stringify(data),
+        });
+        if (res.ok) { toast('资料已更新'); }
+        else { const err = await res.json(); toast(err.detail || '更新失败', 'error'); }
+    } catch (e) { toast('网络错误', 'error'); }
+}
+
+async function changePassword() {
+    const oldPass = document.getElementById('prof-old-pass').value;
+    const newPass = document.getElementById('prof-new-pass').value;
+    const confirmPass = document.getElementById('prof-confirm-pass').value;
+    if (!oldPass || !newPass) { toast('请填写密码', 'error'); return; }
+    if (newPass !== confirmPass) { toast('两次密码不一致', 'error'); return; }
+    if (newPass.length < 6) { toast('密码至少 6 位', 'error'); return; }
+    try {
+        const res = await fetch('/admin/api/profile/password', {
+            method: 'PUT', headers: authHeaders(),
+            body: JSON.stringify({ old_password: oldPass, new_password: newPass }),
+        });
+        if (res.ok) {
+            toast('密码已修改，需重新登录');
+            setTimeout(() => { localStorage.removeItem('admin_token'); location.reload(); }, 1500);
+        } else { const err = await res.json(); toast(err.detail || '修改失败', 'error'); }
+    } catch (e) { toast('网络错误', 'error'); }
 }

@@ -13,13 +13,15 @@
 
 - 📝 **文章管理** — Markdown 编辑器 + 实时预览
 - 📂 **分类系统** — 文章分类管理
-- 🏷️ **标签系统** — 标签云 + 标签筛选
+- 🏷️ **标签系统** — 标签云 + 标签筛选 + 写文章时选择标签
 - 💬 **评论系统** — 访客评论 + 管理员审核 + 嵌套回复
 - 🔗 **友情链接** — 友链管理
 - 📊 **数据仪表盘** — 统计概览
+- 👤 **个人信息** — 修改显示名称、邮箱、头像、密码
 - 🔐 **JWT 认证** — 安全的管理后台
 - 📱 **响应式设计** — 移动端友好
 - 🐳 **Docker 部署** — 一键启动
+- 🏷️ **动态标题** — 博客标题自动显示管理员名称
 
 ## 🚀 Quick Start
 
@@ -27,7 +29,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/Dreams-Zip/halo-blog.git
+git clone https://github.com/ArcaneCoreX-dev/halo-blog.git
 cd halo-blog
 
 # Start the application
@@ -216,5 +218,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <p align="center">
-  <small>© 2026 ArcaneCoreX-dev | <a href="https://github.com/Dreams-Zip/">GitHub</a></small>
+  <small>© 2026 ArcaneCoreX-dev | <a href="https://github.com/ArcaneCoreX-dev/">GitHub</a></small>
 </p>

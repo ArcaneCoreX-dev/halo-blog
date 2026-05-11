@@ -227,7 +227,7 @@ async def admin_list_comments(
             "id": c.id, "post_id": c.post_id, "author_name": c.author_name,
             "author_email": c.author_email, "content": c.content,
             "is_approved": c.is_approved, "created_at": c.created_at.isoformat(),
-            "reply_count": len(c.replies),
+            "reply_count": len(c.replies) if c.replies else 0,
         })
     total_pages = (total + page_size - 1) // page_size
     return {"items": items, "total": total, "page": page, "page_size": page_size, "total_pages": total_pages}
@@ -292,3 +292,44 @@ async def admin_update_settings(data: dict, db: AsyncSession = Depends(get_db), 
             db.add(Setting(key=key, value=str(value)))
     await db.commit()
     return {"message": "Settings updated"}
+
+
+# ── Profile ──────────────────────────────────────────
+@router.get("/profile")
+async def admin_get_profile(current_user: User = Depends(auth.get_current_user)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "display_name": current_user.display_name,
+        "email": current_user.email,
+        "avatar": current_user.avatar,
+        "role": current_user.role,
+        "created_at": current_user.created_at.isoformat(),
+    }
+
+
+@router.put("/profile")
+async def admin_update_profile(data: dict, db: AsyncSession = Depends(get_db), current_user: User = Depends(auth.get_current_user)):
+    if "display_name" in data:
+        current_user.display_name = data["display_name"]
+    if "email" in data:
+        current_user.email = data["email"]
+    if "avatar" in data:
+        current_user.avatar = data["avatar"]
+    await db.commit()
+    return {"message": "Profile updated"}
+
+
+@router.put("/profile/password")
+async def admin_change_password(data: dict, db: AsyncSession = Depends(get_db), current_user: User = Depends(auth.get_current_user)):
+    old_password = data.get("old_password", "")
+    new_password = data.get("new_password", "")
+    if not old_password or not new_password:
+        raise HTTPException(status_code=400, detail="Old and new passwords are required")
+    if not auth.verify_password(old_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Old password is incorrect")
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    current_user.password_hash = auth.hash_password(new_password)
+    await db.commit()
+    return {"message": "Password changed"}

@@ -2,29 +2,29 @@
 {% block title %}{{ settings.blog_title }} — {{ settings.blog_subtitle }}{% endblock %}
 
 {% block content %}
+<!-- Hero -->
+<section class="hero">
+    <h1 class="hero-title">{{ settings.blog_title }}</h1>
+    <p class="hero-subtitle">{{ settings.blog_subtitle }}</p>
+</section>
+
 <div class="home-layout">
-    <!-- Hero -->
-    <section class="hero">
-        <h1 class="hero-title">{{ settings.blog_title }}</h1>
-        <p class="hero-subtitle">{{ settings.blog_subtitle }}</p>
-    </section>
+    <!-- Main: Post list -->
+    <main class="home-main">
+        <section class="post-list" id="post-list">
+            <div class="loading">加载中...</div>
+        </section>
+        <div class="pagination" id="pagination"></div>
+    </main>
 
-    <!-- Post list -->
-    <section class="post-list" id="post-list">
-        <div class="loading">加载中...</div>
-    </section>
-
-    <!-- Pagination -->
-    <div class="pagination" id="pagination"></div>
-
-    <!-- Sidebar -->
+    <!-- Right: Sidebar -->
     <aside class="sidebar" id="sidebar">
         <div class="widget">
-            <h3 class="widget-title">分类</h3>
+            <h3 class="widget-title">📂 分类</h3>
             <div id="category-list" class="category-list"></div>
         </div>
         <div class="widget">
-            <h3 class="widget-title">标签</h3>
+            <h3 class="widget-title">🏷️ 标签</h3>
             <div id="tag-cloud" class="tag-cloud"></div>
         </div>
     </aside>

@@ -140,5 +140,5 @@ def _serialize_comment(c: Comment) -> dict:
         "id": c.id, "post_id": c.post_id, "parent_id": c.parent_id,
         "author_name": c.author_name, "author_website": c.author_website,
         "content": c.content, "created_at": c.created_at.isoformat(),
-        "replies": [_serialize_comment(r) for r in c.replies if r.is_approved],
+        "replies": [_serialize_comment(r) for r in (c.replies or []) if r.is_approved],
     }

@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python deps first (cache layer)
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 RUN mkdir -p src && touch src/__init__.py && \
     pip install --no-cache-dir . && \
     rm -rf src
