@@ -12,7 +12,9 @@ from src.domain.models import Comment
 from src.domain.schemas import CommentCreate
 
 
-async def get_comments_by_post(db: AsyncSession, post_id: int, approved_only: bool = True) -> list[Comment]:
+async def get_comments_by_post(
+    db: AsyncSession, post_id: int, approved_only: bool = True
+) -> list[Comment]:
     """Get top-level comments with nested replies."""
     query = (
         select(Comment)
@@ -26,7 +28,9 @@ async def get_comments_by_post(db: AsyncSession, post_id: int, approved_only: bo
     return list(result.scalars().unique().all())
 
 
-async def get_all_comments(db: AsyncSession, page: int = 1, page_size: int = 20) -> tuple[list[Comment], int]:
+async def get_all_comments(
+    db: AsyncSession, page: int = 1, page_size: int = 20
+) -> tuple[list[Comment], int]:
     """Admin: get all comments with pagination."""
     from sqlalchemy import func
 

@@ -51,14 +51,18 @@ async def _get_blog_settings(db: AsyncSession):
     """Merge config settings with admin display name for dynamic title."""
     from sqlalchemy import select
     from src.domain.models import User
+
     user = (await db.execute(select(User).where(User.role == "admin"))).scalar_one_or_none()
     admin_name = user.display_name if user and user.display_name else settings.blog_title
+
     class BlogSettings:
         blog_title = f"{admin_name} Blog" if user and user.display_name else settings.blog_title
         blog_subtitle = settings.blog_subtitle
         blog_footer = settings.blog_footer
         posts_per_page = settings.posts_per_page
+
     return BlogSettings()
+
 
 # API routes
 app.include_router(blog_router)
@@ -81,7 +85,9 @@ async def archives_page(request: Request, db: AsyncSession = Depends(get_db)):
 @app.get("/post/{slug}", response_class=HTMLResponse)
 async def post_detail(request: Request, slug: str, db: AsyncSession = Depends(get_db)):
     blog_settings = await _get_blog_settings(db)
-    return templates.TemplateResponse(request, "theme/post.html", {"settings": blog_settings, "slug": slug})
+    return templates.TemplateResponse(
+        request, "theme/post.html", {"settings": blog_settings, "slug": slug}
+    )
 
 
 @app.get("/categories", response_class=HTMLResponse)
@@ -116,6 +122,7 @@ async def upload_file(request: Request):
     file: UploadFile = form.get("file")  # type: ignore
     if not file:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=400, detail="No file uploaded")
 
     ext = Path(file.filename or "file").suffix

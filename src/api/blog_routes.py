@@ -18,7 +18,11 @@ from src.services import comment_service, post_service
 router = APIRouter(prefix="/api", tags=["blog"])
 
 
-@router.get("/posts", summary="获取文章列表", description="分页获取已发布的文章，支持按分类、标签、关键词筛选。")
+@router.get(
+    "/posts",
+    summary="获取文章列表",
+    description="分页获取已发布的文章，支持按分类、标签、关键词筛选。",
+)
 async def list_posts(
     page: int = 1,
     page_size: int = 10,
@@ -28,35 +32,66 @@ async def list_posts(
     db: AsyncSession = Depends(get_db),
 ):
     posts, total = await post_service.get_posts(
-        db, page=page, page_size=page_size, status="published",
-        category_slug=category, tag_slug=tag, keyword=q,
+        db,
+        page=page,
+        page_size=page_size,
+        status="published",
+        category_slug=category,
+        tag_slug=tag,
+        keyword=q,
     )
     items = []
     for p in posts:
-        items.append({
-            "id": p.id, "title": p.title, "slug": p.slug,
-            "summary": p.summary, "cover_image": p.cover_image,
-            "views": p.views, "is_top": p.is_top,
-            "category": {"id": p.category.id, "name": p.category.name, "slug": p.category.slug} if p.category else None,
-            "tags": [{"id": t.id, "name": t.name, "slug": t.slug} for t in p.tags],
-            "published_at": p.published_at.isoformat() if p.published_at else None,
-            "comment_count": len([c for c in p.comments if c.is_approved]),
-        })
+        items.append(
+            {
+                "id": p.id,
+                "title": p.title,
+                "slug": p.slug,
+                "summary": p.summary,
+                "cover_image": p.cover_image,
+                "views": p.views,
+                "is_top": p.is_top,
+                "category": {"id": p.category.id, "name": p.category.name, "slug": p.category.slug}
+                if p.category
+                else None,
+                "tags": [{"id": t.id, "name": t.name, "slug": t.slug} for t in p.tags],
+                "published_at": p.published_at.isoformat() if p.published_at else None,
+                "comment_count": len([c for c in p.comments if c.is_approved]),
+            }
+        )
     total_pages = (total + page_size - 1) // page_size
-    return {"items": items, "total": total, "page": page, "page_size": page_size, "total_pages": total_pages}
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 
-@router.get("/posts/{slug}", summary="获取文章详情", description="根据 slug 获取单篇文章详情，自动增加浏览计数。")
+@router.get(
+    "/posts/{slug}",
+    summary="获取文章详情",
+    description="根据 slug 获取单篇文章详情，自动增加浏览计数。",
+)
 async def get_post(slug: str, db: AsyncSession = Depends(get_db)):
     post = await post_service.get_post_by_slug(db, slug)
     if not post or post.status != "published":
         raise HTTPException(status_code=404, detail="Post not found")
     await post_service.increment_views(db, post.id)
     return {
-        "id": post.id, "title": post.title, "slug": post.slug,
-        "summary": post.summary, "content": post.content, "content_html": post.content_html,
-        "cover_image": post.cover_image, "views": post.views + 1, "is_top": post.is_top,
-        "category": {"id": post.category.id, "name": post.category.name, "slug": post.category.slug} if post.category else None,
+        "id": post.id,
+        "title": post.title,
+        "slug": post.slug,
+        "summary": post.summary,
+        "content": post.content,
+        "content_html": post.content_html,
+        "cover_image": post.cover_image,
+        "views": post.views + 1,
+        "is_top": post.is_top,
+        "category": {"id": post.category.id, "name": post.category.name, "slug": post.category.slug}
+        if post.category
+        else None,
         "tags": [{"id": t.id, "name": t.name, "slug": t.slug} for t in post.tags],
         "published_at": post.published_at.isoformat() if post.published_at else None,
         "is_allow_comment": post.is_allow_comment,
@@ -70,7 +105,11 @@ async def get_comments(post_id: int, db: AsyncSession = Depends(get_db)):
     return [_serialize_comment(c) for c in comments]
 
 
-@router.post("/comments", summary="提交评论", description="为文章提交评论，评论默认需要管理员审核后才会显示。")
+@router.post(
+    "/comments",
+    summary="提交评论",
+    description="为文章提交评论，评论默认需要管理员审核后才会显示。",
+)
 async def add_comment(data: CommentCreate, request: Request, db: AsyncSession = Depends(get_db)):
     post = await post_service.get_post_by_id(db, data.post_id)
     if not post or post.status != "published":
@@ -85,15 +124,25 @@ async def add_comment(data: CommentCreate, request: Request, db: AsyncSession = 
 
 @router.get("/categories", summary="获取分类列表", description="获取所有分类及其文章计数。")
 async def list_categories(db: AsyncSession = Depends(get_db)):
-    cats = (await db.execute(
-        select(Category).order_by(Category.name)
-    )).scalars().all()
+    cats = (await db.execute(select(Category).order_by(Category.name))).scalars().all()
     result = []
     for c in cats:
-        count = (await db.execute(
-            select(func.count()).select_from(Post).where(Post.category_id == c.id, Post.status == "published")
-        )).scalar() or 0
-        result.append({"id": c.id, "name": c.name, "slug": c.slug, "description": c.description, "post_count": count})
+        count = (
+            await db.execute(
+                select(func.count())
+                .select_from(Post)
+                .where(Post.category_id == c.id, Post.status == "published")
+            )
+        ).scalar() or 0
+        result.append(
+            {
+                "id": c.id,
+                "name": c.name,
+                "slug": c.slug,
+                "description": c.description,
+                "post_count": count,
+            }
+        )
     return result
 
 
@@ -102,43 +151,63 @@ async def list_tags(db: AsyncSession = Depends(get_db)):
     tags = (await db.execute(select(Tag).order_by(Tag.name))).scalars().all()
     result = []
     for t in tags:
-        count = (await db.execute(
-            select(func.count()).select_from(Post).where(Post.tags.any(Tag.id == t.id), Post.status == "published")
-        )).scalar() or 0
+        count = (
+            await db.execute(
+                select(func.count())
+                .select_from(Post)
+                .where(Post.tags.any(Tag.id == t.id), Post.status == "published")
+            )
+        ).scalar() or 0
         result.append({"id": t.id, "name": t.name, "slug": t.slug, "post_count": count})
     return result
 
 
 @router.get("/links")
 async def list_links(db: AsyncSession = Depends(get_db)):
-    links = (await db.execute(
-        select(Link).where(Link.is_visible.is_(True)).order_by(Link.sort_order)
-    )).scalars().all()
+    links = (
+        (await db.execute(select(Link).where(Link.is_visible.is_(True)).order_by(Link.sort_order)))
+        .scalars()
+        .all()
+    )
     return [{"id": l.id, "name": l.name, "url": l.url, "description": l.description} for l in links]
 
 
 @router.get("/archives", summary="获取归档", description="获取所有已发布文章，按年月分组。")
 async def archives(db: AsyncSession = Depends(get_db)):
-    posts = (await db.execute(
-        select(Post).where(Post.status == "published").order_by(Post.published_at.desc())
-    )).scalars().all()
+    posts = (
+        (
+            await db.execute(
+                select(Post).where(Post.status == "published").order_by(Post.published_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     grouped: dict[str, list] = {}
     for p in posts:
         if p.published_at:
             key = p.published_at.strftime("%Y-%m")
             if key not in grouped:
                 grouped[key] = []
-            grouped[key].append({
-                "id": p.id, "title": p.title, "slug": p.slug,
-                "published_at": p.published_at.isoformat(),
-            })
+            grouped[key].append(
+                {
+                    "id": p.id,
+                    "title": p.title,
+                    "slug": p.slug,
+                    "published_at": p.published_at.isoformat(),
+                }
+            )
     return grouped
 
 
 def _serialize_comment(c: Comment) -> dict:
     return {
-        "id": c.id, "post_id": c.post_id, "parent_id": c.parent_id,
-        "author_name": c.author_name, "author_website": c.author_website,
-        "content": c.content, "created_at": c.created_at.isoformat(),
+        "id": c.id,
+        "post_id": c.post_id,
+        "parent_id": c.parent_id,
+        "author_name": c.author_name,
+        "author_website": c.author_website,
+        "content": c.content,
+        "created_at": c.created_at.isoformat(),
         "replies": [_serialize_comment(r) for r in (c.replies or []) if r.is_approved],
     }

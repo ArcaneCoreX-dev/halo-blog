@@ -37,9 +37,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
 
 
-async def get_current_user(
-    request: Request, db: AsyncSession = Depends(get_db)
-) -> User:
+async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
     """Extract and verify JWT from cookie or Authorization header."""
     token = request.cookies.get("access_token")
     if not token:
@@ -64,7 +62,9 @@ async def get_current_user(
 
 async def ensure_admin(db: AsyncSession) -> None:
     """Create default admin user if none exists."""
-    existing = (await db.execute(select(User).where(User.username == settings.admin_username))).scalar_one_or_none()
+    existing = (
+        await db.execute(select(User).where(User.username == settings.admin_username))
+    ).scalar_one_or_none()
     if not existing:
         admin = User(
             username=settings.admin_username,

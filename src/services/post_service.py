@@ -38,16 +38,16 @@ async def get_posts(
     if tag_slug:
         query = query.join(Post.tags).where(Tag.slug == tag_slug)
     if keyword:
-        query = query.where(
-            Post.title.contains(keyword) | Post.summary.contains(keyword)
-        )
+        query = query.where(Post.title.contains(keyword) | Post.summary.contains(keyword))
 
     # Count
     count_q = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_q)).scalar() or 0
 
     # Paginate
-    query = query.order_by(Post.is_top.desc(), Post.published_at.desc().nullslast(), Post.created_at.desc())
+    query = query.order_by(
+        Post.is_top.desc(), Post.published_at.desc().nullslast(), Post.created_at.desc()
+    )
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     posts = list(result.scalars().unique().all())
