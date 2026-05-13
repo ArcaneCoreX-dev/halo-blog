@@ -8,6 +8,9 @@
     <p class="hero-subtitle">{{ settings.blog_subtitle }}</p>
 </section>
 
+<!-- Active filters -->
+<div class="active-filters" id="active-filters" style="display:none"></div>
+
 <div class="home-layout">
     <!-- Main: Post list -->
     <main class="home-main">
@@ -34,17 +37,33 @@
 {% block scripts %}
 <script>
 let currentPage = 1;
+let currentKeyword = '';
 const pageSize = {{ settings.posts_per_page }};
 
-async function loadPosts(page = 1) {
-    currentPage = page;
+// Read keyword from URL (from header search)
+(function() {
+    const urlQ = new URLSearchParams(window.location.search).get('q');
+    if (urlQ) {
+        currentKeyword = urlQ;
+        const input = document.getElementById('header-search-input');
+        if (input) input.value = urlQ;
+    }
+})();
+
+function getSearchParams(page = 1) {
     const params = new URLSearchParams({ page, page_size: pageSize });
     const cat = new URLSearchParams(window.location.search).get('category');
     const tag = new URLSearchParams(window.location.search).get('tag');
     if (cat) params.set('category', cat);
     if (tag) params.set('tag', tag);
+    if (currentKeyword) params.set('q', currentKeyword);
+    return params;
+}
 
-    const res = await fetch(`/api/posts?${params}`);
+async function loadPosts(page = 1) {
+    currentPage = page;
+    const params = getSearchParams(page);
+    const res = await fetch('/api/posts?' + params);
     const data = await res.json();
 
     const container = document.getElementById('post-list');
@@ -52,19 +71,24 @@ async function loadPosts(page = 1) {
         container.innerHTML = '<div class="empty">暂无文章</div>';
     } else {
         container.innerHTML = data.items.map(p => `
-            <article class="post-card ${p.is_top ? 'is-top' : ''}">
-                ${p.cover_image ? `<div class="post-cover"><img src="${p.cover_image}" alt="${p.title}" loading="lazy"></div>` : ''}
-                <div class="post-body">
-                    <div class="post-meta">
-                        ${p.category ? `<span class="meta-cat"><a href="/?category=${p.category.slug}">${p.category.name}</a></span>` : ''}
-                        <span class="meta-date">${formatDate(p.published_at)}</span>
-                        <span class="meta-views">👁 ${p.views}</span>
-                        <span class="meta-comments">💬 ${p.comment_count}</span>
+            <article class="post-item ${p.is_top ? 'is-top' : ''}">
+                <section class="post-item-body">
+                    <div class="post-item-text">
+                        <a class="post-item-title" href="/post/${p.slug}" target="_blank">${p.is_top ? '&#128204; ' : ''}${p.title}</a>
+                        <p class="post-item-summary">${p.summary || truncate(stripHtml(p.content_html || ''), 200)}</p>
                     </div>
-                    <h2 class="post-title"><a href="/post/${p.slug}">${p.is_top ? '📌 ' : ''}${p.title}</a></h2>
-                    <p class="post-summary">${p.summary || ''}</p>
-                    <div class="post-tags">${p.tags.map(t => `<a href="/?tag=${t.slug}" class="tag">#${t.name}</a>`).join('')}</div>
-                </div>
+                    <footer class="post-item-foot">
+                        <span class="post-meta-item">
+                            <span>${formatDateTime(p.created_at)}</span>
+                        </span>
+                        <a class="post-meta-item" href="/post/${p.slug}#comments" target="_blank" title="评论 ${p.comment_count}">
+                            <span>&#128172; ${p.comment_count}</span>
+                        </a>
+                        <a class="post-meta-item" href="/post/${p.slug}" target="_blank" title="阅读 ${p.views}">
+                            <span>&#128065; ${p.views}</span>
+                        </a>
+                    </footer>
+                </section>
             </article>
         `).join('');
     }
@@ -73,13 +97,47 @@ async function loadPosts(page = 1) {
     const pg = document.getElementById('pagination');
     if (data.total_pages > 1) {
         let html = '';
-        if (page > 1) html += `<button onclick="loadPosts(${page - 1})">← 上一页</button>`;
-        html += `<span class="page-info">${page} / ${data.total_pages}</span>`;
-        if (page < data.total_pages) html += `<button onclick="loadPosts(${page + 1})">下一页 →</button>`;
+        if (page > 1) html += '<button onclick="loadPosts(' + (page - 1) + ')">&#8592; 上一页</button>';
+        html += '<span class="page-info">' + page + ' / ' + data.total_pages + '</span>';
+        if (page < data.total_pages) html += '<button onclick="loadPosts(' + (page + 1) + ')">下一页 &#8594;</button>';
         pg.innerHTML = html;
     } else {
         pg.innerHTML = '';
     }
+    updateActiveFilters();
+}
+
+function updateActiveFilters() {
+    const el = document.getElementById('active-filters');
+    const cat = new URLSearchParams(window.location.search).get('category');
+    const tag = new URLSearchParams(window.location.search).get('tag');
+    const parts = [];
+    if (currentKeyword) parts.push('搜索: "' + currentKeyword + '" <button onclick="clearSearch()">&#10005;</button>');
+    if (cat) parts.push('分类: ' + cat + ' <a href="/" class="clear-filter" target="_blank">&#10005;</a>');
+    if (tag) parts.push('标签: ' + tag + ' <a href="/" class="clear-filter" target="_blank">&#10005;</a>');
+    if (parts.length) {
+        el.style.display = 'flex';
+        el.innerHTML = parts.map(p => '<span class="filter-tag">' + p + '</span>').join('');
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+function clearSearch() {
+    currentKeyword = '';
+    document.getElementById('header-search-input').value = '';
+    window.history.replaceState({}, '', '/');
+    loadPosts(1);
+}
+
+function stripHtml(html) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+}
+
+function truncate(text, len) {
+    return text.length > len ? text.slice(0, len) + '...' : text;
 }
 
 async function loadSidebar() {
@@ -89,18 +147,23 @@ async function loadSidebar() {
     ]);
 
     document.getElementById('category-list').innerHTML = cats.map(c =>
-        `<a href="/?category=${c.slug}" class="cat-item">${c.name} <span class="cat-count">${c.post_count}</span></a>`
+        '<a href="/?category=' + c.slug + '" class="cat-item" target="_blank">' + c.name + ' <span class="cat-count">' + c.post_count + '</span></a>'
     ).join('') || '<p class="empty-sm">暂无分类</p>';
 
     document.getElementById('tag-cloud').innerHTML = tags.map(t =>
-        `<a href="/?tag=${t.slug}" class="tag">#${t.name} (${t.post_count})</a>`
+        '<a href="/?tag=' + t.slug + '" class="tag" target="_blank">#' + t.name + ' (' + t.post_count + ')</a>'
     ).join('') || '<p class="empty-sm">暂无标签</p>';
 }
 
-function formatDate(iso) {
+function formatDateTime(iso) {
     if (!iso) return '';
     const d = new Date(iso);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const Y = d.getFullYear();
+    const M = String(d.getMonth() + 1).padStart(2, '0');
+    const D = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return Y + '-' + M + '-' + D + ' ' + h + ':' + m;
 }
 
 loadPosts();

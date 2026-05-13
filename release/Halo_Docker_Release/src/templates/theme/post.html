@@ -1,28 +1,46 @@
 {% extends "theme/base.html" %}
 {% block title %}文章 — {{ settings.blog_title }}{% endblock %}
 
-{% block content %}
-<div class="post-layout">
-    <article class="post-detail" id="post-detail">
-        <div class="loading">加载中...</div>
-    </article>
+{% block head %}
+<!-- KaTeX for LaTeX -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+{% endblock %}
 
-    <!-- Comments section -->
-    <section class="comments-section" id="comments-section" style="display:none">
-        <h3 class="section-title">评论</h3>
-        <div id="comments-list"></div>
-        <div class="comment-form" id="comment-form">
-            <h4>发表评论</h4>
-            <div class="form-row">
-                <input type="text" id="c-name" placeholder="昵称 *" required>
-                <input type="email" id="c-email" placeholder="邮箱（可选）">
-                <input type="url" id="c-website" placeholder="网站（可选）">
+{% block content %}
+<!-- Reading Progress Bar -->
+<div class="reading-progress" id="reading-progress"></div>
+
+<div class="post-with-toc">
+    <!-- TOC Sidebar -->
+    <aside class="toc-sidebar" id="toc-sidebar">
+        <div class="toc-title">目录</div>
+        <nav class="toc-nav" id="toc-nav"></nav>
+    </aside>
+
+    <div class="post-layout">
+        <article class="post-detail" id="post-detail">
+            <div class="loading">加载中...</div>
+        </article>
+
+        <!-- Comments section -->
+        <section class="comments-section" id="comments-section" style="display:none">
+            <h3 class="section-title">评论</h3>
+            <div id="comments-list"></div>
+            <div class="comment-form" id="comment-form">
+                <h4>发表评论</h4>
+                <div class="form-row">
+                    <input type="text" id="c-name" placeholder="昵称 *" required>
+                    <input type="email" id="c-email" placeholder="邮箱（可选）">
+                    <input type="url" id="c-website" placeholder="网站（可选）">
+                </div>
+                <textarea id="c-content" placeholder="写下你的评论..." rows="4" required></textarea>
+                <button onclick="submitComment()" class="btn btn-primary">提交评论</button>
+                <p class="form-tip">评论需审核后显示</p>
             </div>
-            <textarea id="c-content" placeholder="写下你的评论..." rows="4" required></textarea>
-            <button onclick="submitComment()" class="btn btn-primary">提交评论</button>
-            <p class="form-tip">评论需审核后显示</p>
-        </div>
-    </section>
+        </section>
+    </div>
 </div>
 {% endblock %}
 
@@ -32,7 +50,7 @@ const slug = "{{ slug }}";
 let postId = null;
 
 async function loadPost() {
-    const res = await fetch(`/api/posts/${slug}`);
+    const res = await fetch('/api/posts/' + slug);
     if (!res.ok) {
         document.getElementById('post-detail').innerHTML = '<div class="error">文章未找到</div>';
         return;
@@ -40,20 +58,30 @@ async function loadPost() {
     const p = await res.json();
     postId = p.id;
 
-    document.title = `${p.title} — {{ settings.blog_title }}`;
+    document.title = p.title + ' — {{ settings.blog_title }}';
 
     document.getElementById('post-detail').innerHTML = `
         <header class="post-header">
+            ${p.cover_image ? '<div class="post-cover-img"><img src="' + p.cover_image + '" alt="' + p.title + '"></div>' : ''}
             <div class="post-meta">
-                ${p.category ? `<span class="meta-cat"><a href="/?category=${p.category.slug}">${p.category.name}</a></span>` : ''}
+                ${p.category ? '<span class="meta-cat"><a href="/?category=' + p.category.slug + '" target="_blank">' + p.category.name + '</a></span>' : ''}
                 <span class="meta-date">${formatDate(p.published_at)}</span>
                 <span class="meta-views">👁 ${p.views}</span>
             </div>
             <h1 class="post-title">${p.title}</h1>
-            <div class="post-tags">${p.tags.map(t => `<a href="/?tag=${t.slug}" class="tag">#${t.name}</a>`).join('')}</div>
+            <div class="post-tags">${p.tags.map(t => '<a href="/?tag=' + t.slug + '" class="tag" target="_blank">#' + t.name + '</a>').join('')}</div>
         </header>
-        <div class="post-content markdown-body">${p.content_html}</div>
+        <div class="post-content markdown-body" id="post-content">${p.content_html}</div>
     `;
+
+    // Generate TOC
+    generateTOC();
+
+    // Render LaTeX
+    renderMath();
+
+    // Reading progress
+    initReadingProgress();
 
     if (p.is_allow_comment) {
         document.getElementById('comments-section').style.display = 'block';
@@ -61,8 +89,67 @@ async function loadPost() {
     }
 }
 
+// TOC Generator
+function generateTOC() {
+    const content = document.getElementById('post-content');
+    const headings = content.querySelectorAll('h2, h3');
+    const tocNav = document.getElementById('toc-nav');
+
+    if (headings.length < 2) {
+        document.getElementById('toc-sidebar').style.display = 'none';
+        return;
+    }
+
+    let html = '';
+    headings.forEach((h, i) => {
+        const id = 'heading-' + i;
+        h.id = id;
+        const level = h.tagName === 'H2' ? 'toc-h2' : 'toc-h3';
+        html += '<a class="toc-link ' + level + '" href="#' + id + '">' + h.textContent + '</a>';
+    });
+    tocNav.innerHTML = html;
+
+    // Highlight on scroll
+    const tocLinks = tocNav.querySelectorAll('.toc-link');
+    window.addEventListener('scroll', () => {
+        let current = '';
+        headings.forEach(h => {
+            if (window.scrollY >= h.offsetTop - 100) current = h.id;
+        });
+        tocLinks.forEach(link => {
+            link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+        });
+    });
+}
+
+// LaTeX Rendering
+function renderMath() {
+    if (typeof renderMathInElement !== 'undefined') {
+        renderMathInElement(document.getElementById('post-content'), {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false},
+                {left: '\\[', right: '\\]', display: true},
+                {left: '\\(', right: '\\)', display: false},
+            ],
+            throwOnError: false,
+        });
+    }
+}
+
+// Reading Progress Bar
+function initReadingProgress() {
+    const bar = document.getElementById('reading-progress');
+    window.addEventListener('scroll', () => {
+        const scrollTop = window.scrollY;
+        const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+        const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+        bar.style.width = progress + '%';
+    });
+}
+
 async function loadComments(postId) {
-    const res = await fetch(`/api/posts/${postId}/comments`);
+    const res = await fetch('/api/posts/' + postId + '/comments');
     const comments = await res.json();
     const container = document.getElementById('comments-list');
 
@@ -79,11 +166,11 @@ function renderComment(c) {
         <div class="comment-item" id="comment-${c.id}">
             <div class="comment-header">
                 <strong>${c.author_name}</strong>
-                ${c.author_website ? `<a href="${c.author_website}" target="_blank" class="comment-site">🔗</a>` : ''}
+                ${c.author_website ? '<a href="' + c.author_website + '" target="_blank" class="comment-site">🔗</a>' : ''}
                 <span class="comment-date">${formatDate(c.created_at)}</span>
             </div>
             <div class="comment-content">${c.content}</div>
-            ${c.replies && c.replies.length ? `<div class="comment-replies">${c.replies.map(r => renderComment(r)).join('')}</div>` : ''}
+            ${c.replies && c.replies.length ? '<div class="comment-replies">' + c.replies.map(r => renderComment(r)).join('') + '</div>' : ''}
         </div>
     `;
 }
@@ -116,7 +203,7 @@ async function submitComment() {
 function formatDate(iso) {
     if (!iso) return '';
     const d = new Date(iso);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
 loadPost();

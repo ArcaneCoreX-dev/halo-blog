@@ -28,7 +28,7 @@ async function loadArchives() {
                 ${data[month].map(p => `
                     <li>
                         <span class="archive-date">${p.published_at.slice(5, 10)}</span>
-                        <a href="/post/${p.slug}" class="archive-title">${p.title}</a>
+                        <a href="/post/${p.slug}" class="archive-title" target="_blank">${p.title}</a>
                     </li>
                 `).join('')}
             </ul>

@@ -69,7 +69,7 @@ async function loadPage(page) {
 
     const titles = {
         dashboard: '仪表盘', posts: '文章管理', editor: '写文章',
-        categories: '分类管理', tags: '标签管理', comments: '评论管理', links: '友链管理', profile: '个人信息',
+        categories: '分类管理', tags: '标签管理', comments: '评论管理', links: '友链管理', profile: '个人信息', draft: '草稿箱',
     };
     title.textContent = titles[page] || page;
     content.innerHTML = '<div class="loading">加载中...</div>';
@@ -83,6 +83,7 @@ async function loadPage(page) {
         case 'comments': await renderComments(content); break;
         case 'links': await renderLinks(content); break;
         case 'profile': await renderProfile(content); break;
+        case 'drafts': await renderDrafts(content); break;
     }
 }
 
@@ -148,6 +149,7 @@ async function renderPosts(el, page = 1) {
                         <td>${p.published_at ? formatDate(p.published_at) : '-'}</td>
                         <td class="action-btns">
                             <button class="action-btn" onclick="editPost(${p.id})">编辑</button>
+                            <button class="action-btn" onclick="exportSinglePostMd(${p.id})">导出 MD</button>
                             <button class="action-btn danger" onclick="deletePost(${p.id})">删除</button>
                         </td>
                     </tr>`).join('')}
@@ -186,6 +188,39 @@ async function deletePost(id) {
     }
 }
 
+function loadMdFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        const titleMatch = text.match(/^#\s+(.+)$/m);
+        if (titleMatch) {
+            document.getElementById('ep-title').value = titleMatch[1].trim();
+        }
+        document.getElementById('ep-content').value = text;
+        updatePreview();
+        toast('Markdown 已导入编辑器');
+    };
+    reader.readAsText(file, 'UTF-8');
+    event.target.value = '';
+}
+
+async function exportSinglePostMd(id) {
+    try {
+        const res = await fetch('/admin/api/posts/' + id + '/export-markdown', { headers: authHeaders() });
+        if (!res.ok) { const err = await res.json(); toast(err.detail || '导出失败', 'error'); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'post-' + id + '.zip';
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('导出成功');
+    } catch (e) { toast('导出失败', 'error'); }
+}
+
 // ── Editor ───────────────────────────────────────────
 let editingPostId = null;
 
@@ -197,8 +232,10 @@ function renderEditor(el) {
                 <button class="btn" onclick="loadPage('posts')">← 返回列表</button>
                 <button class="btn btn-primary" onclick="savePost()">💾 保存</button>
                 <button class="btn" onclick="savePost('published')">📤 发布</button>
+                <button class="btn" onclick="document.getElementById('md-import-input').click()">📄 导入 MD</button>
             </div>
         </div>
+        <input type="file" id="md-import-input" accept=".md" style="display:none" onchange="loadMdFile(event)">
         <div class="form-group">
             <label>标题</label>
             <input id="ep-title" placeholder="文章标题">
@@ -225,11 +262,9 @@ function renderEditor(el) {
         <div class="editor-layout">
             <div class="editor-input">
                 <label style="font-weight:600;margin-bottom:8px;display:block;">Markdown 编辑器</label>
-                <textarea id="ep-content" placeholder="在此输入 Markdown 内容..." oninput="updatePreview()"></textarea>
+                <textarea id="ep-content" placeholder="在此输入 Markdown 内容..."></textarea>
             </div>
-            <div class="editor-preview markdown-body" id="ep-preview">
-                <p style="color:var(--text-secondary);">预览区域</p>
-            </div>
+
         </div>
     `;
     loadCategoriesForSelect();
@@ -654,4 +689,46 @@ async function changePassword() {
             setTimeout(() => { localStorage.removeItem('admin_token'); location.reload(); }, 1500);
         } else { const err = await res.json(); toast(err.detail || '修改失败', 'error'); }
     } catch (e) { toast('网络错误', 'error'); }
+}
+
+// ── Drafts ────────────────────────────────────────
+async function renderDrafts(el) {
+    const res = await fetch('/admin/api/posts?status=draft&page_size=50', { headers: authHeaders() });
+    const data = await res.json();
+
+    if (data.items.length === 0) {
+        el.innerHTML = '<div class="empty">草稿箱为空</div>';
+        return;
+    }
+
+    el.innerHTML = `
+        <div class="admin-table">
+            <table>
+                <thead><tr><th>标题</th><th>创建时间</th><th>操作</th></tr></thead>
+                <tbody>
+                    ${data.items.map(p => `
+                        <tr>
+                            <td><a href="#" onclick="editPost(${p.id});return false">${p.title}</a></td>
+                            <td>${formatDate(p.created_at)}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary" onclick="publishDraft(${p.id})">发布</button>
+                                <button class="btn btn-sm" onclick="editPost(${p.id})">编辑</button>
+                                <button class="btn btn-sm" onclick="deletePost(${p.id})" style="color:red">删除</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+async function publishDraft(id) {
+    if (!confirm('确定发布此文章？')) return;
+    const res = await fetch('/admin/api/posts/' + id, {
+        method: 'PUT', headers: authHeaders(),
+        body: JSON.stringify({ status: 'published' }),
+    });
+    if (res.ok) { toast('已发布'); loadPage('drafts'); }
+    else { toast('发布失败', 'error'); }
 }

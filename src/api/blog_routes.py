@@ -29,6 +29,7 @@ async def list_posts(
     category: str | None = None,
     tag: str | None = None,
     q: str | None = None,
+    sort: str = "latest",
     db: AsyncSession = Depends(get_db),
 ):
     posts, total = await post_service.get_posts(
@@ -39,6 +40,7 @@ async def list_posts(
         category_slug=category,
         tag_slug=tag,
         keyword=q,
+        sort=sort,
     )
     items = []
     for p in posts:
@@ -51,10 +53,12 @@ async def list_posts(
                 "cover_image": p.cover_image,
                 "views": p.views,
                 "is_top": p.is_top,
+                "content_html": p.content_html[:500] if p.content_html else "",
                 "category": {"id": p.category.id, "name": p.category.name, "slug": p.category.slug}
                 if p.category
                 else None,
                 "tags": [{"id": t.id, "name": t.name, "slug": t.slug} for t in p.tags],
+                "created_at": p.created_at.isoformat() if p.created_at else None,
                 "published_at": p.published_at.isoformat() if p.published_at else None,
                 "comment_count": len([c for c in p.comments if c.is_approved]),
             }

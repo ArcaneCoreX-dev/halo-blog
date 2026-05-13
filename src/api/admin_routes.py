@@ -4,7 +4,7 @@ Copyright (c) 2026 ArcaneCoreX-dev - MIT License
 See LICENSE file for details.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -479,3 +479,134 @@ async def admin_change_password(
     current_user.password_hash = auth.hash_password(new_password)
     await db.commit()
     return {"message": "Password changed"}
+
+
+
+# ── Export single post as Markdown ──────────────────────────
+@router.get("/posts/{post_id}/export-markdown", summary="导出单篇文章为 Markdown",
+            description="导出单篇文章为 Markdown 文件，带图片 assets 文件夹。")
+async def export_single_post_markdown(
+    post_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(auth.get_current_user),
+):
+    import zipfile
+    import io
+    import urllib.parse
+    from fastapi.responses import StreamingResponse
+    import re as re_export
+
+    result = await db.execute(select(Post).where(Post.id == post_id))
+    p = result.scalar_one_or_none()
+    if not p:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    zip_buffer = io.BytesIO()
+    slug = p.slug or f'post-{p.id}'
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # Write the markdown file at root of zip
+        # Extract image URLs from content
+        markdown_content = f"# {p.title}\n\n{p.content or ''}"
+        zf.writestr(f"{slug}.md", markdown_content)
+
+        # Find all image references in content
+        image_urls = set()
+        if p.content:
+            # Markdown images: ![alt](/path) or ![alt](url)
+            for m in re_export.finditer(r'!\[.*?\]\((.*?)\)', p.content):
+                image_urls.add(m.group(1))
+            # HTML img tags
+            for m in re_export.finditer(r'<img[^>]+src=["\'](.*?)["\']', p.content):
+                image_urls.add(m.group(1))
+            # Direct image links on their own line
+            for m in re_export.finditer(r'(?<![\[!])(https?://[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg|bmp))', p.content, re_export.IGNORECASE):
+                image_urls.add(m.group(1))
+
+        if image_urls:
+            import urllib.request
+            import os as os_mod
+
+            for url in image_urls:
+                # Skip data URIs and local relative paths
+                if url.startswith('data:') or url.startswith('{{'):
+                    continue
+                try:
+                    # Determine a filename
+                    url_path = url.split('?')[0]
+                    basename = url_path.rstrip('/').split('/')[-1] or 'image.png'
+                    # Put in assets folder
+                    assets_path = f"assets/{basename}"
+                    # Only add if not already included
+                    if assets_path not in [zi.filename for zi in zf.filelist]:
+                        req = urllib.request.Request(url, headers={
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        })
+                        with urllib.request.urlopen(req, timeout=10) as resp:
+                            img_data = resp.read()
+                        zf.writestr(assets_path, img_data)
+                except Exception:
+                    pass  # Skip images that fail to download
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/x-zip-compressed",
+        headers={"Content-Disposition": f"attachment; filename={urllib.parse.quote(slug)}.zip"}
+    )
+
+
+# ── Import Markdown ──────────────────────────────────────────
+@router.post("/import-markdown", summary="导入 Markdown 文件",
+             description="上传 .md 文件批量导入文章。")
+async def import_markdown(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(auth.get_current_user),
+):
+    import markdown as md_lib
+    import re as re_import
+
+    form = await request.form()
+    files = form.getlist("files")
+
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded")
+
+    imported = 0
+    for file in files:
+        content_bytes = await file.read()
+        text = content_bytes.decode("utf-8", errors="replace")
+
+        # Extract title from first H1 or filename
+        title_match = re_import.search(r"^#\s+(.+)$", text, re_import.MULTILINE)
+        title = title_match.group(1).strip() if title_match else file.filename.replace(".md", "")
+
+        # Generate slug from title
+        slug = re_import.sub(r"[^a-z0-9\u4e00-\u9fff]+", "-", title.lower()).strip("-")
+
+        # Extract summary (first non-empty, non-header paragraph)
+        summary = ""
+        for line in text.split("\n"):
+            line = line.strip()
+            if line and not line.startswith("#") and not line.startswith("!["):
+                summary = line[:200]
+                break
+
+        content_html = md_lib.markdown(text, extensions=["fenced_code", "tables", "codehilite", "toc"])
+        now = datetime.utcnow()
+        post = Post(
+            title=title,
+            slug=slug,
+            content=text,
+            content_html=content_html,
+            summary=summary,
+            status="published",
+            published_at=now,
+            is_allow_comment=True,
+        )
+        db.add(post)
+        imported += 1
+
+    await db.commit()
+    return {"message": f"Imported {imported} Markdown files", "count": imported}

@@ -28,6 +28,22 @@ async def lifespan(app: FastAPI):
     await init_db()
     async with async_session() as db:
         await ensure_admin(db)
+    # Fix posts with empty content_html
+    from src.domain.models import Post
+    import markdown as md_lib
+    from sqlalchemy import select
+    async with async_session() as session:
+        # Fix posts with empty content_html
+        result = await session.execute(select(Post).where(Post.content_html == None).where(Post.content != None))
+        for post in result.scalars().all():
+            if post.content:
+                post.content_html = md_lib.markdown(post.content, extensions=['fenced_code', 'tables', 'codehilite', 'toc'])
+        # Fix published posts without published_at
+        from datetime import datetime as dt
+        result = await session.execute(select(Post).where(Post.published_at == None).where(Post.status == 'published'))
+        for post in result.scalars().all():
+            post.published_at = post.created_at or dt.utcnow()
+        await session.commit()
     yield
     # Shutdown
 

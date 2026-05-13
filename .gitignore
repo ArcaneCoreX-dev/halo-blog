@@ -37,3 +37,9 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+# Project scripts
+scripts/
+
+# Temp files
+tmp_*

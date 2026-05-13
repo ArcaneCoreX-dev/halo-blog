@@ -23,6 +23,7 @@ async def get_posts(
     category_slug: str | None = None,
     tag_slug: str | None = None,
     keyword: str | None = None,
+    sort: str = "latest",
 ) -> tuple[list[Post], int]:
     """Get paginated posts with optional filters."""
     query = select(Post).options(
@@ -38,16 +39,29 @@ async def get_posts(
     if tag_slug:
         query = query.join(Post.tags).where(Tag.slug == tag_slug)
     if keyword:
-        query = query.where(Post.title.contains(keyword) | Post.summary.contains(keyword))
+        query = query.where(
+            Post.title.contains(keyword)
+            | Post.content.contains(keyword)
+            | Post.summary.contains(keyword)
+        )
 
     # Count
     count_q = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_q)).scalar() or 0
 
+    # Sort
+    if sort == "oldest":
+        query = query.order_by(
+            Post.is_top.desc(), Post.created_at.asc().nullslast()
+        )
+    elif sort == "views":
+        query = query.order_by(Post.is_top.desc(), Post.views.desc())
+    else:  # latest (default)
+        query = query.order_by(
+            Post.is_top.desc(), Post.created_at.desc().nullslast()
+        )
+
     # Paginate
-    query = query.order_by(
-        Post.is_top.desc(), Post.published_at.desc().nullslast(), Post.created_at.desc()
-    )
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     posts = list(result.scalars().unique().all())
@@ -123,9 +137,10 @@ async def update_post(db: AsyncSession, post_id: int, data: PostUpdate) -> Post 
             post.content_html = markdown.markdown(
                 value, extensions=["fenced_code", "tables", "codehilite", "toc"]
             )
-        elif field == "status" and value == "published" and post.status != "published":
+        elif field == "status" and value == "published":
             setattr(post, field, value)
-            post.published_at = datetime.utcnow()
+            if post.published_at is None:
+                post.published_at = datetime.utcnow()
         else:
             setattr(post, field, value)
 
